@@ -23,7 +23,18 @@ params = {"Schadstoffklasse":"emission_class","Preis":"price","Kategorie":"", "L
                        "Farbe":"color","Innenausstattung":"interior"
                        }
 arr = []
-class Request_by_id:
+class Helper:
+    def cookie(self):
+        cookies = {
+            '__gads': 'ID=1520b794fe127d46:T=1643188159:S=ALNI_MbyWcRxZEA29CVGk1t_y4QY8CAMew',
+            '_abck': '1742DD56712AE08182DA0AFEDF7A2C17~0~YAAQRggQAgAPCXN+AQAA/FA5lwe97mLvvdLS+4ffbY+oz01dAeMU9H8BJkZv0gwU/ce3b+6cAiakFuxaRqG2b/QKXXBl7GS0ct40nxWXxypIoG1//cMaUrKN2YMvuxTpAsJjpHgAx9/ixcPLO676wyNcclLb+jBbIxXXVCuACXHm5fyRvdB6AgW+5RRe20M1vLkzEH8SBbAEZG99OtFFiu08o6/DZJbdrcROxqf6x7oKyM3hjCXeKwE7JIsPjFCVQvGEJbJoNAiYDsQR3SoevaxJ2Y3TVJgJ8PFkBPjoJSzyz+wxpAM/kCdvWkFCDbNLouipewYy35ziKAtldsxtANzR5OpxMF6D4a52ElhdFlrOH165DWYzo35DZOzNaoPv1AAdVED4qpfLHJL0GRi2bovklTjzycA=~-1~-1~-1',
+            '_clck': '13mnxd0|1|eyg|0',
+            '_clsk': '1i5ql6m|1643192652219|3|0|h.clarity.ms/collect',
+            '_fbp': 'fb.1.1643190455664.287716889',
+        }
+        return cookies
+
+class Request_by_id():
 
     def __init__(self, id):
         self.id = id
@@ -32,6 +43,7 @@ class Request_by_id:
                        "Einparkhilfe":"Parking assistance","Airbags":"Airbags","Farbe (Hersteller)":"color_manufacturer",
                        "Farbe":"color","Innenausstattung":"interior"
                        }
+        self.cookie = Helper().cookie()
 
     def make_request(self):
         #url = f"https://suchen.mobile.de/fahrzeuge/details.html?id={str(self.id)}&damageUnrepaired=NO_DAMAGE_UNREPAIRED&isSearchRequest=true&makeModelVariant1.makeId=1900&makeModelVariant1.modelId=9&pageNumber=1&ref=quickSearch&scopeId=C&sfmr=false&fnai=prev&searchId=2f5045cf-c8d4-a09e-056f-051ab33794cc"
@@ -40,15 +52,9 @@ class Request_by_id:
         header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
         }
-        cookies = {
-            '__gads': 'ID=1520b794fe127d46:T=1643188159:S=ALNI_MbyWcRxZEA29CVGk1t_y4QY8CAMew',
-            '_abck': '1742DD56712AE08182DA0AFEDF7A2C17~0~YAAQRggQAgAPCXN+AQAA/FA5lwe97mLvvdLS+4ffbY+oz01dAeMU9H8BJkZv0gwU/ce3b+6cAiakFuxaRqG2b/QKXXBl7GS0ct40nxWXxypIoG1//cMaUrKN2YMvuxTpAsJjpHgAx9/ixcPLO676wyNcclLb+jBbIxXXVCuACXHm5fyRvdB6AgW+5RRe20M1vLkzEH8SBbAEZG99OtFFiu08o6/DZJbdrcROxqf6x7oKyM3hjCXeKwE7JIsPjFCVQvGEJbJoNAiYDsQR3SoevaxJ2Y3TVJgJ8PFkBPjoJSzyz+wxpAM/kCdvWkFCDbNLouipewYy35ziKAtldsxtANzR5OpxMF6D4a52ElhdFlrOH165DWYzo35DZOzNaoPv1AAdVED4qpfLHJL0GRi2bovklTjzycA=~-1~-1~-1',
-            '_clck': '13mnxd0|1|eyg|0',
-            '_clsk': '1i5ql6m|1643192652219|3|0|h.clarity.ms/collect',
-            '_fbp': 'fb.1.1643190455664.287716889',
-            }
+
         proxies = {'http':'150.129.148.99:35101'}
-        r = requests.get(url, timeout=20, headers=header, cookies=cookies, proxies=proxies)
+        r = requests.get(url, timeout=20, headers=header, cookies=self.cookie, proxies=proxies)
         #print(r.content)
         return r.content
 
@@ -108,6 +114,33 @@ class Request_by_id:
 
         return element_arr
 
+    def get_starts(self,soup):
+        # find div by id td-box
+        start = soup.find('span', {'class':'star-rating-s u-valign-middle u-margin-right-9'})
+        # get attribute data-rating
+        return start['data-rating']
+
+    def get_company_name(self,soup):
+        # get company name by class h3 seller-title__inner
+        company = soup.find('div', {'class':'h3 seller-title__inner'})
+        return company.text
+
+    def get_description(self,soup):
+        # get description by class cBox-body cBox-body--vehicledescription
+        pass
+
+
+class GbabMain:
+    def __init__(self,url):
+        self.url = url
+
+    def make_request(self):
+        url = self.url
+        header = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+        }
+        cookies = {
+            '__gads': 'ID=1520b794fe127d46:T=1643188159:S=ALNI_MbyWcRxZEA29CVGk1t_y4QY8CAMew',
 
 
 if __name__ == '__main__':
