@@ -34,7 +34,16 @@ class Helper:
         }
         return cookies
 
-class Request_by_id():
+    def header(self):
+        header = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+        }
+        return header
+
+    def proxyes(self):
+        pass
+
+class Request_by_id:
 
     def __init__(self, id):
         self.id = id
@@ -131,29 +140,43 @@ class Request_by_id():
 
 
 class GbabMain:
-    def __init__(self,url):
-        self.url = url
+    def __init__(self):
+        self.url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&ref=quickSearch&sfmr=false&vc=Car&ms="
+        self.cookie = Helper().cookie()
+        self.header = Helper().header()
 
     def make_request(self):
-        url = self.url
-        header = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
-        }
-        cookies = {
-            '__gads': 'ID=1520b794fe127d46:T=1643188159:S=ALNI_MbyWcRxZEA29CVGk1t_y4QY8CAMew',
+        # params = auto model
+        param = "3500"
+
+        # make request by ulr
+        r = requests.get(self.url+param, timeout=20, headers=self.header, cookies=self.cookie)
+        print(r.content)
+
+    def parse_data(self):
+        data = self.make_request()
+
+        soup = BeautifulSoup(data, 'html.parser')
+
+        # get hit counter
+        self.hit_counder(soup)
+
+    def hit_counder(self, soup):
+        pass
 
 
 if __name__ == '__main__':
+    res = GbabMain()
+    res.make_request()
 
-    elments_ids = [338014347,336291920,338349571,336300676]
-    for le in elments_ids:
-        r = Request_by_id(le)
-        r.parse_data()
-    print(arr)
-
-    # save to json
-    with open('data.txt', 'w') as outfile:
-        json.dump(arr, outfile)
+    # elments_ids = [338014347,336291920,338349571,336300676]
+    # for le in elments_ids:
+    #     r = Request_by_id(le)
+    #     r.parse_data()
+    #
+    # # save to json
+    # with open('data.txt', 'w') as outfile:
+    #     json.dump(arr, outfile)
 
 
 
