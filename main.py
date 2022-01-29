@@ -7,6 +7,9 @@ import requests
 import json
 from bs4 import BeautifulSoup
 import re
+from pymongo import MongoClient
+import random
+import time
 
 """
 
@@ -40,8 +43,32 @@ class Helper:
         }
         return header
 
-    def proxyes(self):
-        pass
+    def proxies(self):
+        proxy = ["177.104.125.173:55443","45.79.230.234:80","43.224.10.11:6666","195.91.221.230:55443","185.142.67.23:8080","185.34.22.225:37879","123.231.221.242:6969"]
+
+        # random number
+        r = random.randint(0,len(proxy)-1)
+        return {"http":proxy[r]}
+
+    def generate_ref_id(self):
+        # generate ref id = eed68f73-d54f-1c19-6009-ba50697b11fc
+        ref_id = ""
+        for i in range(0,8):
+            ref_id += random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        ref_id += "-"
+        for i in range(0,4):
+            ref_id += random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        ref_id += "-"
+        for i in range(0,4):
+            ref_id += random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        ref_id += "-"
+        for i in range(0,4):
+            ref_id += random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        ref_id += "-"
+        for i in range(0,12):
+            ref_id += random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        return ref_id
+
 
 class Request_by_id:
 
@@ -63,7 +90,7 @@ class Request_by_id:
         }
 
         proxies = {'http':'150.129.148.99:35101'}
-        r = requests.get(url, timeout=20, headers=header, cookies=self.cookie, proxies=proxies)
+        r = requests.get(url, timeout=20, headers=header, cookies=self.cookie) #, proxies=proxies
         #print(r.content)
         return r.content
 
@@ -139,44 +166,165 @@ class Request_by_id:
         pass
 
 
+class Database:
+    def __init__(self):
+        self.conn = None
+        self.cursor = None
+
+    def connect(self):
+        db = MongoClient('mongodb+srv://vitol:vitol486070920@ebay.elcsu.mongodb.net/test?retryWrites=true&w=majority')
+        db = db['pc_scrap_data']
+        return db
+
+    def insert_data(self,car_id):
+        db = self.connect()
+        db = db['car_id']
+        print(car_id)
+        try:
+            print(db.find_one({'car_id': car_id}))
+            # check if car_id is already in database
+            if db.find_one({'car_id':car_id}) is None:
+
+                db.insert_one({'car_id': car_id, 'sold': False, 'check': False})
+            #db.update_one({'car_id':car_id}, {'$set':car_id}, upsert=True)
+        except:
+            pass
+
+
+
+
+
 class GbabMain:
     def __init__(self):
-        self.url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&ref=quickSearch&sfmr=false&vc=Car&ms="
+        self.url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true"
+        self.rest_of_url = "&ref=srp&s=Car&sfmr=false&vc=Car"
         self.cookie = Helper().cookie()
         self.header = Helper().header()
+        self.proxies = Helper().proxies()
+        self.db = Database().connect()
+        self.db_functions = Database()
+        self.page_param = "&pageNumber="
 
-    def make_request(self):
+    def make_request(self,param,page=1,sub_param=None,url_type=0):
+        # generate refId
+        ref_id = Helper().generate_ref_id()
+        print(f"sub_param : {sub_param}")
+        if sub_param == None:
+            sub_param_origin = ''
+        if sub_param != None:
+            sub_param_origin = "%3B"+str(sub_param)
         # params = auto model
-        param = "3500"
 
         # make request by ulr
-        r = requests.get(self.url+param, timeout=20, headers=self.header, cookies=self.cookie)
-        print(r.content)
 
-    def parse_data(self):
-        data = self.make_request()
+        session = requests.Session()
+        session.cookies.set('Host', 'mobile.de', domain='.mobile.de', path='/')
+        session.cookies.set('region', 'US', domain='.mobile.de', path='/')
+        #ul = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&ms=1100&ref=srp&s=Car&sfmr=false&vc=Car&pageNumber=1"
+        #self.url+str(param)+";"+str(sub_param)+"&pageNumber="+str(page)
+        #+";"+str(sub_param)
+        if url_type == 0:
+            r = session.get(self.url+"&ms="+str(param)+sub_param_origin+"&pageNumber="+str(page)+self.rest_of_url, timeout=20, headers=self.header, cookies=self.cookie ) #, proxies=self.proxies
+            print(self.url + "&ms=" + str(param) + sub_param_origin + "&pageNumber=" + str(page) + self.rest_of_url)
+
+        if url_type == 1:
+            url = f'https://suchen.mobile.de/fahrzeuge/search.html?damageUnrepaired=NO_DAMAGE_UNREPAIRED&isSearchRequest=true&makeModelVariant1.makeId={str(param)+sub_param_origin}&pageNumber={str(page)}&ref=srpNextPage&refId={ref_id}&scopeId=C&sfmr=false'
+            print(url)
+            r = session.get(url,
+                timeout=20, headers=self.header, cookies=self.cookie)
+            #print(r.content)
+        return r.content
+
+    def parse_data(self,param):
+        data = self.make_request(param)
 
         soup = BeautifulSoup(data, 'html.parser')
 
+        # get ItemId's from first page
+        try:
+            self.get_item_ids(soup)
+        except Exception as e:
+            raise e
+
         # get hit counter
-        self.hit_counder(soup)
+        hit_counter = self.hit_counder(soup).replace('.','')
+        print(hit_counter)
+        range_loop = int(hit_counter) / 20
+        range_loop = round(range_loop) - 1
+        print(f"page count {range_loop}")
+        if hit_counter != None:
+            if range_loop >= 50:
+
+                for sub_param in range(1,200):
+                    for page in range(1,range_loop):
+                        url_type = 1
+                        data = self.make_request(param,page,sub_param,url_type)
+                        self.get_item_ids2(data)
+            else:
+                print('parse2')
+                # parse by main categories
+                # page by page
+                for page in range(2, range_loop):
+                    print(page)
+                    url_type = 1
+                    data = self.make_request(param, page, None, url_type)
+                    self.get_item_ids2(data)
 
     def hit_counder(self, soup):
-        pass
+        # find span by class hit-counter
+        print('hit_counder')
+        try:
+            span = soup.find('span', {'class':'hit-counter'})
+            print(span.text)
+            return span.text
+        except Exception as e:
+            return None
+
+    def get_item_ids(self, soup):
+
+        # find class cBox cBox--content cBox--resultList
+        div = soup.find('div', {'class':'cBox cBox--content cBox--resultList'}) #cBox cBox--content cBox--resultList
+
+        # find all a with class link--muted no--text--decoration result-item
+        elem = div.find_all('a', {'class':'link--muted no--text--decoration result-item'})
+        for i in elem:
+            # get href
+            car_id = i['data-ad-id']
+
+            # sae in db
+            self.db_functions.insert_data(car_id)
+
+    def get_item_ids2(self, data):
+        #print(data)
+        soup = BeautifulSoup(data, 'html.parser')
+        # # find class cBox cBox--content cBox--resultList
+        # div = soup.find('div', {'class':'cBox cBox--content cBox--resultList '})  # cBox cBox--content cBox--resultList
+        # print(div)
+        # find all a with class link--muted no--text--decoration result-item
+        elem = soup.find_all('a', {'class':'link--muted no--text--decoration result-item'})
+        for i in elem:
+            # get href
+            car_id = i['data-ad-id']
+
+            # sae in db
+            self.db_functions.insert_data(car_id)
 
 
 if __name__ == '__main__':
     res = GbabMain()
-    res.make_request()
+    models_arr = [1400,25650,113,25300,25100,25200,24500,24400,24200,24100,135,189,23825,23800,23600,23500,23100,100,188,
+                  23000,22900,22500,22000,21800,125,21700,21600,20700,20200,20100,20000,4,19800,19600,19300,
+                  149,19000,18975,18875,18700,17900,17700,17500,30011,17300,17200,137,16800,16700,16600,15900,16200,
+                  15500,15400,15200,14845,14800,14700,14600,14400,13900,13450,13450,12600,12400,12100,11900,11650,11600,
+                  11050,11000,10850,186,122,9900,204,205,9000,8800,172,8800,8600,235,255,7700,31864,7400,7000,6800,6600,3,
+                  6325,6200,5900,5700,5600,83,5300,112,4700,4400,3500,375]
 
-    # elments_ids = [338014347,336291920,338349571,336300676]
-    # for le in elments_ids:
-    #     r = Request_by_id(le)
-    #     r.parse_data()
-    #
-    # # save to json
-    # with open('data.txt', 'w') as outfile:
-    #     json.dump(arr, outfile)
+    for param in models_arr:
+        print(param)
+        res.parse_data(param)
+
+
+
 
 
 
