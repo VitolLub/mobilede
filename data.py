@@ -40,7 +40,7 @@ class Database:
         db = db['car_id']
         try:
             # get first 100 records
-            data = db.find({'check':False}).limit(5)
+            data = db.find({'check':0,'sold':False}).limit(100)
             return data
         except:
             return None
@@ -50,7 +50,7 @@ class Database:
         db = db['car_id']
         try:
             # update all records
-            db.update_many({}, {'$set':{'check':False}})
+            db.update_many({}, {'$set':{'check':0}})
         except:
             return None
 
@@ -97,7 +97,10 @@ class Database:
         print(f"update_data_check {param}")
         try:
             # update
-            db.update_one({'car_id': str(param)}, {'$set': {'check': True}})
+            res = db.update_one({'car_id': str(param)}, {'$set': {'check': 1}})
+            if res == True:
+                print("update_data_check True")
+
         except:
             pass
 
@@ -106,7 +109,7 @@ class Database:
         db = db['car_id']
         try:
             # update
-            db.update_many({'check':True,'sold':False}, {'$set':{'check':False}})
+            db.update_many({'check':1,'sold':False}, {'$set':{'check':0}})
         except:
             pass
 
@@ -160,7 +163,10 @@ class Request_by_id:
         self.params = {"Schadstoffklasse":"emission_class","Preis":"price","Kategorie":"category", "Leistung":"hp","Kraftstoffart":"fuel_type","Anzahl Sitzplätze":"number_of_seats","Anzahl der Türen":"number_of_doors","Getriebe":"gearbox",
                        "Erstzulassung":"Initial registration","Anzahl der Fahrzeughalter":"Number of vehicle owners","HU":"Main inspection","Klimatisierung":"Air conditioning",
                        "Einparkhilfe":"Parking assistance","Airbags":"Airbags","Farbe (Hersteller)":"color_manufacturer",
-                       "Farbe":"color","Innenausstattung":"interior"
+                       "Farbe":"color","Innenausstattung":"interior","Hubraum":"Displacement","Kilometerstand":"mileage","Herkunft":"origin","Verfügbarkeit":"availability",
+                       "Fahrzeugnummer":"vehicle_number","Kraftstoffverbrauch":"fuel_consumption","Fahrzeugzustand":"vehicle_condition","Umweltplakette":"environmental_label",
+
+
                        }
         self.cookie = Helper().cookie()
         self.db = Database()
@@ -188,11 +194,15 @@ class Request_by_id:
 
         if self.get_values(soup,element_dict) != 0:
             element_dict['ad_title'] = self.get_title(soup)
+            element_dict['marka'], element_dict['model'] = self.get_model(element_dict['ad_title'])
             element_dict['price'] = self.get_price(soup)
             element_dict['car_id'] = self.id
             element_dict['link'] = self.get_link(soup)
             element_dict['features'] = self.get_features(soup)
             element_dict['description'] = self.get_description(soup)
+            element_dict['phone'] = self.get_phone(soup)
+            element_dict['address'] = self.get_address(soup)
+            element_dict['dealer'] = self.get_dealer(soup)
             arr.append(element_dict)
             self.db.update_data(self.id, 1)
             return True
@@ -270,7 +280,11 @@ class Request_by_id:
         # get description by class cBox-body cBox-body--vehicledescription
         try:
             description = soup.find('div', {'class':'cBox-body cBox-body--vehicledescription'})
-            return description.text
+
+            desc = description.text
+            # replce Fahrzeugbeschreibung laut Anbieter
+            desc = desc.replace('Fahrzeugbeschreibung laut Anbieter','')
+            return desc
         except:
             return ''
 
@@ -281,22 +295,67 @@ class Request_by_id:
         except:
             link = ''
             return link
+        
+    def get_dealer(self, soup):
+        try:
+            dealer = soup.find('a', {'id': 'dealer-hp-link-top'})
+            dealer_res = dealer['href']
+            return dealer_res
+        except:
+            return ''
+
+    def get_model(self, param):
+        try:
+            link = param.split(' ')
+            marka = link[0]
+            model = link[1]
+            return marka, model
+        except:
+            link = ''
+            return link,link
+
+    def get_phone(self, soup):
+
+        try:
+            phone = soup.find('span', {'id':'seller-phone'})
+
+            desc_res = phone.text
+            return desc_res
+        except:
+            return ''
+
+    def get_address(self, soup):
+        try:
+            address = soup.find('p', {'id': 'seller-address'})
+            address_res = address.text
+            return address_res
+        except:
+            return ''
 
 
 class Origin:
     def __init__(self):
         self.db = Database()
 
-    def start(self):
+    def run(self):
         # update all check status
         self.db.update_check_status()
         self.make_request()
+
+
+    def start(self):
+        schedule.every().day.at("19:24").do(self.run)
+        while True:
+            schedule.run_pending()
+
 
     def make_request(self):
 
 
         fir_100 = self.db.get_data()
+        index = 1
         for le in fir_100:
+            index += 1
             try:
                 arr = []
                 print(le)
@@ -314,14 +373,14 @@ class Origin:
                     self.db.update_data_check(le['car_id'])
             except Exception as e:
                 pass
-
-        self.make_request()
+        print(f'first 100 {index}')
+        if index < 99:
+            self.start()
+        else:
+            self.make_request()
 
 if __name__ == '__main__':
     stat = Origin()
     stat.start()
-    schedule.every().day.at("14:20").do(stat.start())
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+
 
