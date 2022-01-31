@@ -224,14 +224,14 @@ class GbabMain:
         #self.url+str(param)+";"+str(sub_param)+"&pageNumber="+str(page)
         #+";"+str(sub_param)
         if url_type == 0:
-            r = session.get(self.url+"&ms="+str(param)+sub_param_origin+"&pageNumber="+str(page)+self.rest_of_url, timeout=20, headers=self.header, cookies=self.cookie ) #, proxies=self.proxies
+            r = session.get(self.url+"&ms="+str(param)+sub_param_origin+"&pageNumber="+str(page)+self.rest_of_url, timeout=15, headers=self.header, cookies=self.cookie ) #, proxies=self.proxies
             print(self.url + "&ms=" + str(param) + sub_param_origin + "&pageNumber=" + str(page) + self.rest_of_url)
 
         if url_type == 1:
             url = f'https://suchen.mobile.de/fahrzeuge/search.html?damageUnrepaired=NO_DAMAGE_UNREPAIRED&isSearchRequest=true&makeModelVariant1.makeId={str(param)+sub_param_origin}&pageNumber={str(page)}&ref=srpNextPage&refId={ref_id}&scopeId=C&sfmr=false'
             print(url)
             r = session.get(url,
-                timeout=20, headers=self.header, cookies=self.cookie)
+                timeout=15, headers=self.header, cookies=self.cookie)
             #print(r.content)
         return r.content
 
@@ -255,11 +255,11 @@ class GbabMain:
         if hit_counter != None:
             if range_loop >= 50:
 
-                for sub_param in range(1,200):
-                    for page in range(1,range_loop):
-                        url_type = 1
-                        data = self.make_request(param,page,sub_param,url_type)
-                        self.get_item_ids2(data)
+                #for sub_param in range(1,200):
+                for page in range(1,range_loop):
+                    url_type = 1
+                    data = self.make_request(param,page,None,url_type)
+                    self.get_item_ids2(data)
             else:
                 print('parse2')
                 # parse by main categories

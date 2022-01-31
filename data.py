@@ -3,6 +3,7 @@
 __author__      = "Lubomir Vitol"
 __copyright__   = "Copyright 2022, Planet Earth"
 
+import schedule
 import requests
 import json
 from bs4 import BeautifulSoup
@@ -54,12 +55,15 @@ class Database:
             return None
 
     # update data if sold
-    def update_data(self,car_id):
+    def update_data(self,car_id,status):
         db = self.connect()
         db = db['car_id']
         try:
             # update
-            db.update_one({'car_id':str(car_id)}, {'$set':{'sold':True}})
+            if status == 0:
+                db.update_one({'car_id':str(car_id)}, {'$set':{'sold':True}})
+            if status == 1:
+                db.update_one({'car_id': str(car_id)}, {'$set': {'sold': False}})
         except:
             pass
 
@@ -76,17 +80,33 @@ class Database:
         # insert many
         db = self.connect()
         db = db['car_posts']
-        try:
+        print(f"insert_all {arr[0]['car_id']}")
+        print(db.find_one({'car_id':arr[0]['car_id']}))
+
+        # check if car_id exist
+        if db.find_one({'car_id':arr[0]['car_id']}) is None:
             db.insert_many(arr)
-        except:
-            pass
+        else:
+            # update
+            db.update_one({'car_id': arr[0]['car_id']}, {'$set': arr[0]})
+
 
     def update_data_check(self, param):
         db = self.connect()
         db = db['car_id']
+        print(f"update_data_check {param}")
         try:
             # update
             db.update_one({'car_id': str(param)}, {'$set': {'check': True}})
+        except:
+            pass
+
+    def update_check_status(self):
+        db = self.connect()
+        db = db['car_id']
+        try:
+            # update
+            db.update_many({'check':True,'sold':False}, {'$set':{'check':False}})
         except:
             pass
 
@@ -143,6 +163,7 @@ class Request_by_id:
                        "Farbe":"color","Innenausstattung":"interior"
                        }
         self.cookie = Helper().cookie()
+        self.db = Database()
 
     def make_request(self):
         #url = f"https://suchen.mobile.de/fahrzeuge/details.html?id={str(self.id)}&damageUnrepaired=NO_DAMAGE_UNREPAIRED&isSearchRequest=true&makeModelVariant1.makeId=1900&makeModelVariant1.modelId=9&pageNumber=1&ref=quickSearch&scopeId=C&sfmr=false&fnai=prev&searchId=2f5045cf-c8d4-a09e-056f-051ab33794cc"
@@ -164,17 +185,19 @@ class Request_by_id:
         soup = BeautifulSoup(data, 'html.parser')
         element_dict = {}
 
-        #print(soup)
+
         if self.get_values(soup,element_dict) != 0:
             element_dict['ad_title'] = self.get_title(soup)
             element_dict['price'] = self.get_price(soup)
             element_dict['car_id'] = self.id
+            element_dict['link'] = self.get_link(soup)
             element_dict['features'] = self.get_features(soup)
+            element_dict['description'] = self.get_description(soup)
             arr.append(element_dict)
+            self.db.update_data(self.id, 1)
             return True
         if self.get_values(soup,element_dict) == 0:
-            db = Database()
-            db.update_data(self.id)
+            self.db.update_data(self.id,0)
             return False
 
 
@@ -182,8 +205,7 @@ class Request_by_id:
     def get_values(self,soup,element_dict):
         # find div by id td-box
         div = soup.find('div', {'id':'td-box'})
-        print(div)
-        #print(div)
+
         # find all divs with class g-row u-margin-bottom-9
         try:
             elem = div.find_all('div', {'class':'g-row u-margin-bottom-9'})
@@ -192,15 +214,12 @@ class Request_by_id:
                 el = i.find_all('div', {'class':'g-col-6'})
                 for index,j in enumerate(el):
                     text = j.text
-                    #print(text.strip())
                     if text.strip() in self.params:
-                        #print('yes')
-                        #print(el[1].text.strip())
-                        res = re.sub('[^A-Za-z0-9]+', '', el[1].text.strip())
+                        res = re.sub('\xa0', ' ', el[1].text.strip())
                         element_dict[self.params[text.strip()]] = res
         except:
             # update sold status in db
-            return None
+            return 0
 
 
 
@@ -249,31 +268,60 @@ class Request_by_id:
 
     def get_description(self,soup):
         # get description by class cBox-body cBox-body--vehicledescription
-        pass
+        try:
+            description = soup.find('div', {'class':'cBox-body cBox-body--vehicledescription'})
+            return description.text
+        except:
+            return ''
+
+    def get_link(self, soup):
+        try:
+            link = soup.find('link', {'rel': 'canonical'})
+            return link['href']
+        except:
+            link = ''
+            return link
+
 
 class Origin:
+    def __init__(self):
+        self.db = Database()
+
+    def start(self):
+        # update all check status
+        self.db.update_check_status()
+        self.make_request()
 
     def make_request(self):
-        db = Database()
 
 
-        fir_100 = db.get_data()
+        fir_100 = self.db.get_data()
         for le in fir_100:
-            arr = []
-            print(le)
-            r = Request_by_id(le['car_id'])
-            res = r.parse_data(arr)
-            if res == True:
-                db.update_data(le['car_id'])
-                print('updated')
-                print(arr)
-                db.inser_all(arr)
+            try:
+                arr = []
+                print(le)
+                r = Request_by_id(le['car_id'])
+                res = r.parse_data(arr)
+                if res == True:
+                    #db.update_data(le['car_id'])
+                    print('updated')
+                    print(arr)
+                    self.db.inser_all(arr)
 
-                # set True if check
-                db.update_data_check(le['car_id'])
+                    # set True if check
+                    self.db.update_data_check(le['car_id'])
+                if res == False:
+                    self.db.update_data_check(le['car_id'])
+            except Exception as e:
+                pass
+
         self.make_request()
 
 if __name__ == '__main__':
     stat = Origin()
-    stat.make_request()
+    stat.start()
+    schedule.every().day.at("14:20").do(stat.start())
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
