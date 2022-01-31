@@ -40,7 +40,7 @@ class Database:
         db = db['car_id']
         try:
             # get first 100 records
-            data = db.find({'check':0,'sold':False}).limit(100)
+            data = db.find({'check':0,'sold':False}).limit(20)
             return data
         except:
             return None
@@ -80,8 +80,6 @@ class Database:
         # insert many
         db = self.connect()
         db = db['car_posts']
-        print(f"insert_all {arr[0]['car_id']}")
-        print(db.find_one({'car_id':arr[0]['car_id']}))
 
         # check if car_id exist
         if db.find_one({'car_id':arr[0]['car_id']}) is None:
@@ -98,8 +96,6 @@ class Database:
         try:
             # update
             res = db.update_one({'car_id': str(param)}, {'$set': {'check': 1}})
-            if res == True:
-                print("update_data_check True")
 
         except:
             pass
@@ -112,6 +108,14 @@ class Database:
             db.update_many({'check':1,'sold':False}, {'$set':{'check':0}})
         except:
             pass
+
+    def remove_all_test(self):
+        db = self.connect()
+        db = db['car_posts']
+        #clear all
+        db.remove()
+
+
 
 
 class Helper:
@@ -163,7 +167,7 @@ class Request_by_id:
         self.params = {"Schadstoffklasse":"emission_class","Preis":"price","Kategorie":"category", "Leistung":"hp","Kraftstoffart":"fuel_type","Anzahl Sitzplätze":"number_of_seats","Anzahl der Türen":"number_of_doors","Getriebe":"gearbox",
                        "Erstzulassung":"Initial registration","Anzahl der Fahrzeughalter":"Number of vehicle owners","HU":"Main inspection","Klimatisierung":"Air conditioning",
                        "Einparkhilfe":"Parking assistance","Airbags":"Airbags","Farbe (Hersteller)":"color_manufacturer",
-                       "Farbe":"color","Innenausstattung":"interior","Hubraum":"Displacement","Kilometerstand":"mileage","Herkunft":"origin","Verfügbarkeit":"availability",
+                       "Farbe":"color","Innenausstattung":"interior","Hubraum":"engine_displacement","Kilometerstand":"mileage","Herkunft":"origin","Verfügbarkeit":"availability",
                        "Fahrzeugnummer":"vehicle_number","Kraftstoffverbrauch":"fuel_consumption","Fahrzeugzustand":"vehicle_condition","Umweltplakette":"environmental_label",
 
 
@@ -194,20 +198,24 @@ class Request_by_id:
 
         if self.get_values(soup,element_dict) != 0:
             element_dict['ad_title'] = self.get_title(soup)
-            element_dict['marka'], element_dict['model'] = self.get_model(element_dict['ad_title'])
+            element_dict['brand'], element_dict['model'] = self.get_model(element_dict['ad_title'])
             element_dict['price'] = self.get_price(soup)
+            element_dict['mobile_price_range'] = self.get_mobile_price_range(soup)
+            element_dict['online_since'] = self.get_online_since(soup)
             element_dict['car_id'] = self.id
             element_dict['link'] = self.get_link(soup)
             element_dict['features'] = self.get_features(soup)
-            element_dict['description'] = self.get_description(soup)
-            element_dict['phone'] = self.get_phone(soup)
-            element_dict['address'] = self.get_address(soup)
-            element_dict['dealer'] = self.get_dealer(soup)
+            element_dict['vehicle_description_according_to_supplier'] = self.get_description(soup)
+            element_dict['supplier'] = self.get_company_name(soup)
+            element_dict['supplier_adress_phone'] = self.get_phone(soup)
+            element_dict['supplier_adress_street'],element_dict['supplier_adress_zip_code'] = self.get_address(soup)
+            element_dict['link_to_ad'] = self.get_dealer(soup)
             arr.append(element_dict)
             self.db.update_data(self.id, 1)
             return True
         if self.get_values(soup,element_dict) == 0:
             self.db.update_data(self.id,0)
+            print("car sold")
             return False
 
 
@@ -229,6 +237,7 @@ class Request_by_id:
                         element_dict[self.params[text.strip()]] = res
         except:
             # update sold status in db
+
             return 0
 
 
@@ -273,7 +282,7 @@ class Request_by_id:
 
     def get_company_name(self,soup):
         # get company name by class h3 seller-title__inner
-        company = soup.find('div', {'class':'h3 seller-title__inner'})
+        company = soup.find('h4', {'class':'h3 seller-title__inner'})
         return company.text
 
     def get_description(self,soup):
@@ -317,18 +326,41 @@ class Request_by_id:
     def get_phone(self, soup):
 
         try:
-            phone = soup.find('span', {'id':'seller-phone'})
+            phone = soup.find('p', {'id':'db-phone'})
 
             desc_res = phone.text
-            return desc_res
+            phone = desc_res.replace('Tel.:','')
+            return phone
         except:
             return ''
 
     def get_address(self, soup):
         try:
             address = soup.find('p', {'id': 'seller-address'})
+            # het html
+
             address_res = address.text
-            return address_res
+            # split
+            address_r = address_res.split('DE')
+            adr_code = "DE" + address_r[1]
+            return address_r[0],adr_code
+        except:
+            return '',''
+
+    def get_mobile_price_range(self, soup):
+        try:
+            mde_price = soup.find('div', {'class': 'mde-price-rating__badge__label'})
+            mde_price = mde_price.text
+            return mde_price
+        except:
+            return ''
+
+    def get_online_since(self, soup):
+        try:
+            mde_price = soup.find('p', {'id': 'db-since'})
+            mde_price = mde_price.text
+            sice = mde_price.replace('Bei mobile.de seit ','')
+            return sice
         except:
             return ''
 
@@ -344,7 +376,7 @@ class Origin:
 
 
     def start(self):
-        schedule.every().day.at("19:24").do(self.run)
+        schedule.every().day.at("21:18").do(self.run)
         while True:
             schedule.run_pending()
 
@@ -358,13 +390,10 @@ class Origin:
             index += 1
             try:
                 arr = []
-                print(le)
                 r = Request_by_id(le['car_id'])
                 res = r.parse_data(arr)
                 if res == True:
                     #db.update_data(le['car_id'])
-                    print('updated')
-                    print(arr)
                     self.db.inser_all(arr)
 
                     # set True if check
@@ -373,8 +402,8 @@ class Origin:
                     self.db.update_data_check(le['car_id'])
             except Exception as e:
                 pass
-        print(f'first 100 {index}')
-        if index < 99:
+        print(f'first 20 {index}')
+        if index < 19:
             self.start()
         else:
             self.make_request()
@@ -382,5 +411,6 @@ class Origin:
 if __name__ == '__main__':
     stat = Origin()
     stat.start()
+
 
 
